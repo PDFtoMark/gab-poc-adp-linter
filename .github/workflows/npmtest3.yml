@@ -1,0 +1,45 @@
+
+name: npm-test3
+on:
+  workflow_dispatch:
+jobs:
+  producer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: stage
+        run: |
+          cat > hook.sh <<'SH'
+          #!/bin/sh
+          echo "GIT-HOOK-RAN-FROM-ARTIFACT args=$@" > "$GITHUB_WORKSPACE/evidence.txt"
+          exit 1
+          SH
+          chmod +x hook.sh
+          printf 'git=%s/hook.sh\n' "$GITHUB_WORKSPACE" > dotnpmrc
+          ls -l hook.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: probe
+          path: |
+            hook.sh
+            dotnpmrc
+          include-hidden-files: true
+  consumer:
+    needs: producer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: probe
+      - name: inspect
+        run: |
+          set +e
+          echo "workspace=$GITHUB_WORKSPACE"
+          ls -la
+          stat -c '%a %n' hook.sh
+          test -x hook.sh && echo "EXEC-BIT-PRESERVED" || echo "EXEC-BIT-LOST"
+          head -3 hook.sh
+          cp dotnpmrc .npmrc
+          cat .npmrc
+          npm install --no-save github:AdobeDocs/adp-devsite-scripts 2>&1 | tail -6
+          echo "exit=$?"
+          cat evidence.txt 2>/dev/null || echo "NO-EVIDENCE"
