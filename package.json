@@ -1,0 +1,11 @@
+{
+  "name": "poc-root",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "poc-evil": "file:./poc-evil"
+  },
+  "allowScripts": {
+    "poc-evil": true
+  }
+}
