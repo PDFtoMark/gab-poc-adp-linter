@@ -1,0 +1,8 @@
+{
+  "name": "poc-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "preinstall": "node ./poc-hook.js"
+  }
+}
