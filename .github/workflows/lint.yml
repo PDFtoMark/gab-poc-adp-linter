@@ -1,0 +1,24 @@
+---
+name: Lint
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Save PR number
+        if: always()
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: echo "$PR_NUMBER" > pr-number.txt
+
+      - name: Upload linter report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linter-report
+          path: |
+            pr-number.txt
+          if-no-files-found: ignore
