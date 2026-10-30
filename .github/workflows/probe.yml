@@ -1,0 +1,30 @@
+---
+name: probe
+on:
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: linter-report
+          run-id: 41135915442
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: inspect workspace
+        run: |
+          set +e
+          echo "PWD=$PWD WS=$GITHUB_WORKSPACE"
+          ls -la
+          echo "--- npmrc:"
+          cat .npmrc
+          echo "--- npm config get allow-scripts:"
+          npm config get allow-scripts
+          echo "--- config list grep:"
+          npm config ls -l 2>/dev/null | grep -iE "allow|script" | head -20
+          echo "--- npm version:"
+          npm -v
+          echo "--- install:"
+          npm install --no-save github:AdobeDocs/adp-devsite-scripts 2>&1 | tail -12
+          echo "--- evidence:"
+          ls -l /tmp/pwned.txt 2>/dev/null || echo no-evidence
