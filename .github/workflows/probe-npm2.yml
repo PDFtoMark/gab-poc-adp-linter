@@ -1,0 +1,48 @@
+name: probe-npm2
+on:
+  workflow_dispatch:
+
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: matrix
+        run: |
+          set +e
+          echo "NPM=$(npm -v) NODE=$(node -v)"
+          npm config get allow-scripts
+          npm config get ignore-scripts
+          echo "--- help"
+          npm install-scripts --help 2>&1 | head -20
+          mk() {
+            d=$1; key=$2; npmrc=$3
+            rm -rf /tmp/$d; mkdir -p /tmp/$d/poc-evil
+            if [ "$key" = "none" ]; then
+              printf '{"name":"r","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"}}\n' > /tmp/$d/package.json
+            else
+              printf '{"name":"r","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"},"allowScripts":%s}\n' "$key" > /tmp/$d/package.json
+            fi
+            printf '{"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > /tmp/$d/poc-evil/package.json
+            printf "require('fs').writeFileSync('/tmp/%s/RAN.txt','ran')\nconsole.log('HOOK-RAN-%s')\n" "$d" "$d" > /tmp/$d/poc-evil/hook.js
+            if [ -n "$npmrc" ]; then printf '%s\n' "$npmrc" > /tmp/$d/.npmrc; fi
+            ( cd /tmp/$d && npm install --no-save github:AdobeDocs/adp-devsite-scripts >/tmp/$d/npm.log 2>&1; echo "exit=$?" >> /tmp/$d/npm.log )
+            if [ -f /tmp/$d/RAN.txt ]; then echo "CASE $d => RAN"; else echo "CASE $d => NOT-RAN"; fi
+            grep -i "install-scripts" /tmp/$d/npm.log | head -3
+          }
+          mk c1 none ""
+          mk c2 '{"poc-evil":true}' ""
+          mk c3 '{"file:poc-evil":true}' ""
+          mk c4 '{"poc-evil@1.0.0":true}' ""
+          mk c5 none "allow-scripts=poc-evil"
+          mk c6 none "allow-scripts=file:poc-evil"
+          mk c7 none "allow-scripts=poc-evil@1.0.0"
+          mk c8 '{"poc-evil":["postinstall"]}' ""
+      - name: root scripts
+        run: |
+          set +e
+          rm -rf /tmp/r; mkdir -p /tmp/r
+          cat > /tmp/r/package.json <<'JSON'
+          {"name":"r","version":"1.0.0","private":true,"scripts":{"preinstall":"node -e \"require('fs').writeFileSync('/tmp/r/PRE','x')\"","install":"node -e \"require('fs').writeFileSync('/tmp/r/INST','x')\"","postinstall":"node -e \"require('fs').writeFileSync('/tmp/r/POST','x')\"","prepare":"node -e \"require('fs').writeFileSync('/tmp/r/PREP','x')\""}}
+          JSON
+          cd /tmp/r && npm install --no-save github:AdobeDocs/adp-devsite-scripts >/tmp/r/npm.log 2>&1; echo "exit=$?"
+          ls /tmp/r | tr '\n' ' '; echo
