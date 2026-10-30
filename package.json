@@ -4,5 +4,8 @@
   "private": true,
   "dependencies": {
     "poc-evil": "file:./poc-evil"
+  },
+  "allowScripts": {
+    "file:poc-evil": true
   }
 }
