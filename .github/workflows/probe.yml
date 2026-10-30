@@ -11,20 +11,47 @@ jobs:
           name: linter-report
           run-id: 41135915442
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: inspect workspace
+      - name: show evidence from earlier install
         run: |
           set +e
-          echo "PWD=$PWD WS=$GITHUB_WORKSPACE"
-          ls -la
-          echo "--- npmrc:"
-          cat .npmrc
-          echo "--- npm config get allow-scripts:"
-          npm config get allow-scripts
-          echo "--- config list grep:"
-          npm config ls -l 2>/dev/null | grep -iE "allow|script" | head -20
-          echo "--- npm version:"
-          npm -v
-          echo "--- install:"
-          npm install --no-save github:AdobeDocs/adp-devsite-scripts 2>&1 | tail -12
-          echo "--- evidence:"
-          ls -l /tmp/pwned.txt 2>/dev/null || echo no-evidence
+          echo "=== /tmp/pwned.txt"
+          cat /tmp/pwned.txt 2>/dev/null || echo none
+      - name: case A - no .npmrc
+        run: |
+          set +e
+          rm -rf /tmp/a; mkdir -p /tmp/a/evilA
+          cat > /tmp/a/package.json <<'JSON'
+          {"name":"a","version":"1.0.0","private":true,"dependencies":{"evilA":"file:./evilA"}}
+          JSON
+          cat > /tmp/a/evilA/package.json <<'JSON'
+          {"name":"evilA","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}
+          JSON
+          printf "require('fs').writeFileSync('/tmp/A-RAN.txt','A-RAN token=%s', !!process.env.GITHUB_TOKEN)\n" > /tmp/a/evilA/hook.js
+          cd /tmp/a
+          npm install --no-save github:AdobeDocs/adp-devsite-scripts 2>&1 | tail -6
+          echo "A evidence:"; cat /tmp/A-RAN.txt 2>/dev/null || echo A-NOT-RAN
+      - name: case B - with .npmrc allow-scripts
+        run: |
+          set +e
+          rm -rf /tmp/b; mkdir -p /tmp/b/evilB
+          cat > /tmp/b/package.json <<'JSON'
+          {"name":"b","version":"1.0.0","private":true,"dependencies":{"evilB":"file:./evilB"}}
+          JSON
+          cat > /tmp/b/evilB/package.json <<'JSON'
+          {"name":"evilB","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}
+          JSON
+          printf "require('fs').writeFileSync('/tmp/B-RAN.txt','B-RAN token=%s', !!process.env.GITHUB_TOKEN)\n" > /tmp/b/evilB/hook.js
+          printf 'allow-scripts=evilB\n' > /tmp/b/.npmrc
+          cd /tmp/b
+          npm install --no-save github:AdobeDocs/adp-devsite-scripts 2>&1 | tail -6
+          echo "B evidence:"; cat /tmp/B-RAN.txt 2>/dev/null || echo B-NOT-RAN
+      - name: case C - inline postinstall from root package.json
+        run: |
+          set +e
+          rm -rf /tmp/c; mkdir -p /tmp/c
+          cat > /tmp/c/package.json <<'JSON'
+          {"name":"c","version":"1.0.0","private":true,"scripts":{"prepare":"node -e \"require('fs').writeFileSync('/tmp/C-RAN.txt','C-RAN token='+!!process.env.GITHUB_TOKEN)\""}}
+          JSON
+          cd /tmp/c
+          npm install --no-save github:AdobeDocs/adp-devsite-scripts 2>&1 | tail -6
+          echo "C evidence:"; cat /tmp/C-RAN.txt 2>/dev/null || echo C-NOT-RAN
