@@ -1,0 +1,38 @@
+name: probe-gitcfg
+on:
+  push:
+
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: git config matrix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          echo "NPM=$(npm -v) NODE=$(node -v) NODEBIN=$(command -v node)"
+          mkcase() {
+            d=$1; gitline=$2
+            rm -rf /tmp/$d /tmp/$d.evidence; mkdir -p /tmp/$d
+            printf '{"name":"r","version":"1.0.0","private":true}\n' > /tmp/$d/package.json
+            printf '#!/bin/sh\necho "SH-RAN-%s args=$@" > /tmp/%s.evidence\n' "$d" "$d" > /tmp/$d/hook.sh
+            printf 'require("fs").writeFileSync("/tmp/%s.evidence","JS-RAN token="+(!!process.env.GITHUB_TOKEN)+" argv="+process.argv.slice(2).join(" "));process.exit(0);\n' "$d" > /tmp/$d/hook.js
+            printf '%s\n' "$gitline" > /tmp/$d/.npmrc
+            ( cd /tmp/$d && timeout 90 npm install --no-save github:AdobeDocs/adp-devsite-scripts >/tmp/$d/npm.log 2>&1; echo "exit=$?" >> /tmp/$d/npm.log )
+            echo "CASE $d => $(cat /tmp/$d.evidence 2>/dev/null || echo NO-EVIDENCE)"
+            echo "   npm tail: $(tail -2 /tmp/$d/npm.log | tr '\n' ' ')"
+          }
+          NB=$(command -v node)
+          mkcase g1 "git=/bin/sh /tmp/g1/hook.sh"
+          mkcase g2 "git=$NB /tmp/g2/hook.js"
+          mkcase g3 "git=/tmp/g3/hook.sh"
+          mkcase g4 "git=sh /tmp/g4/hook.sh"
+          mkcase g5 "git=/bin/sh -c 'node /tmp/g5/hook.js'"
+          rm -rf /tmp/g6; mkdir -p /tmp/g6/dep
+          printf '{"name":"r","version":"1.0.0","private":true,"dependencies":{"dep":"file:./dep"}}\n' > /tmp/g6/package.json
+          printf '{"name":"dep","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > /tmp/g6/dep/package.json
+          printf 'require("fs").writeFileSync("/tmp/g6.evidence","DEP-JS-RAN token="+(!!process.env.GITHUB_TOKEN));console.log("DEP-HOOK-PRINTED");\n' > /tmp/g6/dep/hook.js
+          ( cd /tmp/g6 && timeout 90 npm install --no-save github:AdobeDocs/adp-devsite-scripts >/tmp/g6/npm.log 2>&1 )
+          echo "CASE g6 => $(cat /tmp/g6.evidence 2>/dev/null || echo NO-EVIDENCE)"
+          grep -i "install-scripts" /tmp/g6/npm.log | head -3
