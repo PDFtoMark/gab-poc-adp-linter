@@ -1,0 +1,41 @@
+name: probe-current
+on:
+  workflow_dispatch:
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: npm gate probe
+        run: |
+          npm -v; node -v
+          run_case () {
+            d=$1; mode=$2
+            rm -rf /tmp/$d; mkdir -p /tmp/$d/evil
+            cd /tmp/$d
+            if [ "$mode" = "allowfield" ] || [ "$mode" = "both" ]; then
+              printf '{"name":"root","version":"1.0.0","private":true,"dependencies":{"evil":"file:./evil"},"allowScripts":{"evil":true}}\n' > package.json
+            else
+              printf '{"name":"root","version":"1.0.0","private":true,"dependencies":{"evil":"file:./evil"}}\n' > package.json
+            fi
+            printf '{"name":"evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > evil/package.json
+            printf "require('fs').writeFileSync('/tmp/%s/RAN','ran');console.log('HOOK-RAN-%s')\n" "$d" "$d" > evil/hook.js
+            if [ "$mode" = "npmscript" ] || [ "$mode" = "both" ]; then
+              printf 'allow-scripts=evil\n' > .npmrc
+            fi
+            npm install --no-save github:AdobeDocs/adp-devsite-scripts > /tmp/$d/npm.log 2>&1
+            echo "EXIT $d=$?"
+            if [ -f /tmp/$d/RAN ]; then echo "CASE $d ($mode) => RAN"; else echo "CASE $d ($mode) => NORAN"; fi
+            grep -Ei "install-scripts|HOOK-RAN|added [0-9]+ package" /tmp/$d/npm.log | head -8
+            cd /tmp
+          }
+          run_case a plain
+          run_case b allowfield
+          run_case c npmscript
+          run_case d both
+      - name: root scripts check
+        run: |
+          rm -rf /tmp/r; mkdir -p /tmp/r; cd /tmp/r
+          printf '{"name":"r","version":"1.0.0","private":true,"scripts":{"preinstall":"node -e \\"require(\\"fs\\").writeFileSync(\\"/tmp/r/PRE\\",\\"x\\")\\""}}\n' > package.json
+          cat package.json
+          npm install --no-save github:AdobeDocs/adp-devsite-scripts > npm.log 2>&1; echo "exit=$?"
+          ls /tmp/r
