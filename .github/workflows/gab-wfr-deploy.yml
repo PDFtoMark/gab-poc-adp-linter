@@ -1,0 +1,30 @@
+name: Gab Privileged Deploy
+on:
+  workflow_run:
+    workflows: ["Build"]
+    types: [completed]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact from triggering run
+        uses: actions/download-artifact@v5
+        with:
+          name: website-build-${{ github.event.workflow_run.id }}
+          path: public
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Prove artifact origin and privileged secret access
+        env:
+          EV: ${{ github.event.workflow_run.event }}
+          BR: ${{ github.event.workflow_run.head_branch }}
+          CU: ${{ secrets.CLUSTER_USER }}
+        run: |
+          echo "trigger_event=$EV head_branch=$BR"
+          echo "--- ARTIFACT MARKER ---"
+          cat public/MARKER.txt
+          if [ -n "$CU" ]; then echo "PRIVILEGED_SECRET_ACCESSIBLE len=${#CU}"; else echo "PRIVILEGED_SECRET_MISSING"; fi
