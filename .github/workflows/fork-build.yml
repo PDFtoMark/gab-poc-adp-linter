@@ -1,0 +1,19 @@
+name: Build
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Untrusted PR build output
+        run: |
+          mkdir -p dist
+          echo "MARKER_FROM_PR_BRANCH_BUILD" > dist/MARKER.txt
+      - name: Upload artifact with the name the privileged deploy expects
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-build-${{ github.run_id }}
+          path: dist
